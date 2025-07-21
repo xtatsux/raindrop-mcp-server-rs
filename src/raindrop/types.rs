@@ -102,9 +102,9 @@ pub struct Collection {
     pub color: Option<String>,
     pub public: Option<bool>,
     pub view: CollectionView,
-    pub sort: i32,
+    pub sort: Option<i32>,
     pub cover: Option<Vec<String>>,
-    pub count: i32,
+    pub count: Option<i32>,
     pub expanded: Option<bool>,
     pub parent: Option<ParentRef>,
     pub user: UserRef,
@@ -149,7 +149,7 @@ pub struct UserRef {
 pub struct CreatorRef {
     #[serde(rename = "_id")]
     pub id: i64,
-    pub full_name: String,
+    pub full_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,10 +189,10 @@ pub struct Bookmark {
     pub media: Option<Vec<Media>>,
     pub user: UserRef,
     pub collection: CollectionRef,
-    pub important: bool,
+    pub important: Option<bool>,
     pub highlights: Option<Vec<Highlight>>,
     pub reminder: Option<Reminder>,
-    pub broken: bool,
+    pub broken: Option<bool>,
     pub cache: Option<CacheInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<FileInfo>,
@@ -585,7 +585,8 @@ mod tests {
         let collection: Collection = serde_json::from_value(json).unwrap();
         assert_eq!(collection.id, 123);
         assert_eq!(collection.title, "My Collection");
-        assert_eq!(collection.count, 42);
+        assert_eq!(collection.sort, Some(123));
+        assert_eq!(collection.count, Some(42));
         assert!(collection.public.unwrap());
         assert!(collection.parent.is_some());
         assert_eq!(collection.parent.unwrap().id, 456);
@@ -623,9 +624,119 @@ mod tests {
         assert_eq!(bookmark.id, 1001);
         assert_eq!(bookmark.title, "Test Bookmark");
         assert_eq!(bookmark.tags.len(), 2);
-        assert!(bookmark.important);
-        assert!(!bookmark.broken);
+        assert_eq!(bookmark.important, Some(true));
+        assert_eq!(bookmark.broken, Some(false));
         matches!(bookmark.bookmark_type, BookmarkType::Link);
+    }
+
+    #[test]
+    fn test_bookmark_without_broken_field() {
+        // Test that bookmark can be deserialized even when 'broken' field is missing
+        let json = json!({
+            "_id": 2002,
+            "title": "Test Bookmark Without Broken",
+            "excerpt": "Testing optional broken field",
+            "note": "This bookmark has no broken field",
+            "type": "article",
+            "tags": ["test"],
+            "cover": null,
+            "link": "https://example.com/test",
+            "domain": "example.com",
+            "created": "2023-01-01T00:00:00Z",
+            "lastUpdate": "2023-01-02T00:00:00Z",
+            "media": [],
+            "user": { "$id": 123 },
+            "collection": { "$id": 456 },
+            "important": false,
+            "highlights": [],
+            "reminder": null,
+            // Note: 'broken' field is intentionally omitted
+            "cache": null
+        });
+
+        let bookmark: Bookmark = serde_json::from_value(json).unwrap();
+        assert_eq!(bookmark.id, 2002);
+        assert_eq!(bookmark.title, "Test Bookmark Without Broken");
+        assert_eq!(bookmark.broken, None); // Should be None when field is missing
+    }
+
+    #[test]
+    fn test_collection_without_creator_fullname() {
+        // Test that collection can be deserialized even when creator's fullName field is missing
+        let json = json!({
+            "_id": 789,
+            "title": "Test Collection",
+            "description": "A test collection without creator fullName",
+            "view": "list",
+            "sort": 0,
+            "count": 5,
+            "user": { "$id": 123 },
+            "created": "2023-01-01T00:00:00Z",
+            "lastUpdate": "2023-01-02T00:00:00Z",
+            "creatorRef": {
+                "_id": 456
+                // Note: fullName field is intentionally omitted
+            }
+        });
+
+        let collection: Collection = serde_json::from_value(json).unwrap();
+        assert_eq!(collection.id, 789);
+        assert_eq!(collection.title, "Test Collection");
+        assert!(collection.creator_ref.is_some());
+        let creator = collection.creator_ref.unwrap();
+        assert_eq!(creator.id, 456);
+        assert_eq!(creator.full_name, None); // Should be None when field is missing
+    }
+
+    #[test]
+    fn test_collection_with_null_sort_and_count() {
+        // Test that collection can be deserialized even when sort and count fields are null
+        let json = json!({
+            "_id": 999,
+            "title": "Test Collection with Nulls",
+            "description": "Testing null i32 fields",
+            "view": "list",
+            "sort": null,
+            "count": null,
+            "user": { "$id": 123 },
+            "created": "2023-01-01T00:00:00Z",
+            "lastUpdate": "2023-01-02T00:00:00Z"
+        });
+
+        let collection: Collection = serde_json::from_value(json).unwrap();
+        assert_eq!(collection.id, 999);
+        assert_eq!(collection.title, "Test Collection with Nulls");
+        assert_eq!(collection.sort, None);
+        assert_eq!(collection.count, None);
+    }
+
+    #[test]
+    fn test_bookmark_without_important_field() {
+        // Test that bookmark can be deserialized even when 'important' field is missing
+        let json = json!({
+            "_id": 3003,
+            "title": "Test Bookmark Without Important",
+            "excerpt": "Testing optional important field",
+            "type": "link",
+            "tags": ["test"],
+            "link": "https://example.com/test",
+            "domain": "example.com",
+            "created": "2023-01-01T00:00:00Z",
+            "lastUpdate": "2023-01-02T00:00:00Z",
+            "media": [],
+            "user": { "$id": 123 },
+            "collection": { "$id": 456 },
+            // Note: 'important' field is intentionally omitted
+            "highlights": [],
+            "reminder": null,
+            "broken": false,
+            "cache": null
+        });
+
+        let bookmark: Bookmark = serde_json::from_value(json).unwrap();
+        assert_eq!(bookmark.id, 3003);
+        assert_eq!(bookmark.title, "Test Bookmark Without Important");
+        assert_eq!(bookmark.important, None); // Should be None when field is missing
     }
 
     #[test]
@@ -680,9 +791,9 @@ mod tests {
             color: None,
             public: Some(false),
             view: CollectionView::List,
-            sort: 0,
+            sort: Some(0),
             cover: None,
-            count: 0,
+            count: Some(0),
             expanded: None,
             parent: None,
             user: UserRef { id: 456 },
