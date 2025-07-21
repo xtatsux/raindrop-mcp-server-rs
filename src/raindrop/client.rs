@@ -54,7 +54,14 @@ impl RaindropClient {
         match status {
             StatusCode::OK | StatusCode::CREATED => {
                 let text = response.text().await?;
-                serde_json::from_str::<T>(&text).map_err(RaindropMcpError::JsonSerialization)
+                serde_json::from_str::<T>(&text).map_err(|e| {
+                    debug!("Failed to deserialize response: {}", e);
+                    debug!(
+                        "Response text (first 500 chars): {}",
+                        &text.chars().take(500).collect::<String>()
+                    );
+                    RaindropMcpError::JsonSerialization(e)
+                })
             }
             StatusCode::UNAUTHORIZED => Err(RaindropMcpError::Unauthorized(format!(
                 "Invalid or expired access token for {url}"
